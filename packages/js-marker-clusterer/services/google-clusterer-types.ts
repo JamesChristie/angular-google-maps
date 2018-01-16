@@ -1,4 +1,4 @@
-import {Marker, GoogleMap, LatLngBounds} from '@agm/core/services/google-maps-types';
+import {Marker, GoogleMap, LatLngBounds, MVCObject, LatLngLiteral, LatLngBoundsLiteral} from '@agm/core/services/google-maps-types';
 
 export interface CalculatorResult {
   text: string;
@@ -7,12 +7,24 @@ export interface CalculatorResult {
 
 export type CalculateFunction = (marker: Marker[], count: number) => CalculatorResult;
 
-export interface MarkerClustererInstance {
+export interface LatLngEvaluatable {
+  lat: Function;
+  lng: Function;
+}
+
+export interface Cluster extends MVCObject {
+  getBounds(): LatLngBounds;
+  getCenter(): LatLngEvaluatable;
+  getMarkers(): MarkerProperties[];
+}
+
+export interface MarkerClustererInstance extends MVCObject {
   zoomOnClick_: boolean;
   averageCenter_: boolean;
   imagePath_: string;
   minimumClusterSize_: number;
   imageExtension_: string;
+  clusters_: Cluster[];
   new(map: GoogleMap, marker: Marker[], options: ClusterOptions): MarkerClustererInstance;
   addMarker(marker: Marker, noDraw?: boolean): void;
   addMarkers(markers: Marker[], noDraw?: boolean): void;
@@ -34,6 +46,16 @@ export interface MarkerClustererInstance {
   setMap(map: GoogleMap): void;
   setMaxZoom(maxZoom: number): void;
   setStyles(styles: ClusterStyle): void;
+}
+
+export interface MarkerProperties {
+  title: string;
+}
+
+export interface AgmClusterClickEvent {
+  bounds: LatLngBoundsLiteral;
+  center: LatLngLiteral;
+  markers: MarkerProperties[];
 }
 
 export interface ClusterOptions {

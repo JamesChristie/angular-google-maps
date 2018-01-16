@@ -1,9 +1,10 @@
-import {Directive, Input, OnDestroy, OnChanges, OnInit, SimpleChange} from '@angular/core';
+import {Directive, Input, OnDestroy, OnChanges, OnInit, SimpleChange, QueryList, ContentChildren, Output, EventEmitter} from '@angular/core';
 
 import {ClusterManager} from '../services/managers/cluster-manager';
-import {MarkerManager, InfoWindowManager} from '@agm/core';
+import {MarkerManager, InfoWindowManager, AgmInfoWindow, AgmMarker} from '@agm/core';
 
-import {ClusterOptions, ClusterStyle} from '../services/google-clusterer-types';
+import {ClusterOptions, ClusterStyle, Cluster, AgmClusterClickEvent} from '../services/google-clusterer-types';
+import { Subscription } from 'rxjs/Subscription';
 
 /**
  * AgmMarkerCluster clusters map marker if they are near together
@@ -71,10 +72,39 @@ export class AgmMarkerCluster implements OnDestroy, OnChanges, OnInit, ClusterOp
    */
   @Input() styles: ClusterStyle;
 
+  /**
+   * Whether to automatically open the child info window when the marker is clicked.
+   */
+  @Input() openInfoWindow: boolean = true;
+
   @Input() imagePath: string;
   @Input() imageExtension: string;
 
-  constructor(private _clusterManager: ClusterManager) {}
+  /**
+   * This event emitter gets emitted when the user clicks on the marker.
+   */
+  @Output() clusterClick: EventEmitter<any> = new EventEmitter<any>();
+
+  /**
+   * @internal
+   */
+  @ContentChildren(AgmInfoWindow) infoWindow: QueryList<AgmInfoWindow> = new QueryList<AgmInfoWindow>();
+
+  private _observableSubscriptions: Subscription[] = [];
+
+  constructor(private _clusterManager: ClusterManager) {
+    this.handleInfoWindowUpdate();
+    this.infoWindow.changes.subscribe(() => this.handleInfoWindowUpdate());
+  }
+
+  private handleInfoWindowUpdate() {
+    if (this.infoWindow.length > 1) {
+      throw new Error('Expected no more than one info window.');
+    }
+    this.infoWindow.forEach(marker => {
+      marker.hostMarker = <any> this;
+    });
+  }
 
   /** @internal */
   ngOnDestroy() {
@@ -110,6 +140,8 @@ export class AgmMarkerCluster implements OnDestroy, OnChanges, OnInit, ClusterOp
     if (changes['imageExtension']) {
       this._clusterManager.setImageExtension(this);
     }
+
+    this._addEventListeners();
   }
 
   /** @internal */
@@ -124,5 +156,50 @@ export class AgmMarkerCluster implements OnDestroy, OnChanges, OnInit, ClusterOp
       imagePath: this.imagePath,
       imageExtension: this.imageExtension,
     });
+  }
+
+  private _addEventListeners() {
+    const clusterClickObservable = this._clusterManager
+      .createClusterEventObservable('clusterclick', this);
+
+    const doubleClickObservable = this._clusterManager
+      .createClusterEventObservable('dblclick', this);
+
+    const clusterClickSubscription = clusterClickObservable
+      .subscribe((cluster: Cluster) => {
+        if (this.openInfoWindow) {
+          this.infoWindow.forEach(infoWindow => infoWindow.open());
+        }
+
+        const clusterCenter = cluster.getCenter();
+        const northEastBounds = cluster.getBounds().getNorthEast();
+        const southWestBounds = cluster.getBounds().getSouthWest();
+
+        const event: AgmClusterClickEvent = {
+          bounds: {
+            north: northEastBounds.lat(),
+            east: northEastBounds.lng(),
+            south: southWestBounds.lat(),
+            west: southWestBounds.lng()
+          },
+          center: {
+            lat: clusterCenter.lat(),
+            lng: clusterCenter.lng()
+          },
+          markers: cluster.getMarkers().map(marker => {
+            return { title: marker.title };
+          }),
+        };
+
+        this.clusterClick.emit(event);
+      });
+
+    const doubleClickSubscription = doubleClickObservable
+      .subscribe((cluster: Cluster) => {
+        console.log(cluster);
+      });
+
+    this._observableSubscriptions.push(clusterClickSubscription);
+    this._observableSubscriptions.push(doubleClickSubscription);
   }
 }

@@ -6,8 +6,10 @@ import {MarkerManager} from '../../../core/services/managers/marker-manager';
 import {GoogleMapsAPIWrapper} from '../../../core/services/google-maps-api-wrapper';
 import {AgmMarker} from '../../../core/directives/marker';
 import {AgmMarkerCluster} from './../../directives/marker-cluster';
-import {Marker} from '@agm/core/services/google-maps-types';
+import {Marker, LatLngLiteral} from '@agm/core/services/google-maps-types';
 import {MarkerClustererInstance, ClusterOptions} from '../google-clusterer-types';
+import { Observable } from 'rxjs/Observable';
+import { Observer } from 'rxjs/Observer';
 
 declare var MarkerClusterer: any;
 
@@ -134,6 +136,14 @@ export class ClusterManager extends MarkerManager {
       if (c.imageExtension !== undefined) {
         cluster.imageExtension_ = c.imageExtension;
       }
+    });
+  }
+
+  createClusterEventObservable<T>(eventName: string, marker: AgmMarkerCluster): Observable<T> {
+    return Observable.create((observer: Observer<T>) => {
+      this._clustererInstance.then((cluster) => {
+        cluster.addListener(eventName, (e: T) => this._zone.run(() => observer.next(e)));
+      });
     });
   }
 }
